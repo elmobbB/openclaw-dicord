@@ -79,13 +79,18 @@ tree = app_commands.CommandTree(client)
 
 async def _send_response(target, payload: dict) -> None:
     image_url = payload.get("image_url")
+    video_url = payload.get("video_url")
     text = payload.get("text")
     if text:
         logger.info("Sending text response (%d chars)", len(text))
         await target.send(text)
         return
+    if video_url:
+        logger.info("Sending video response")
+        await _send_video(target, video_url)
+        return
     if not image_url:
-        logger.warning("No text or image_url in response payload: %s", payload)
+        logger.warning("No text, image_url, or video_url in response payload: %s", payload)
         await target.send("No response returned from API.")
         return
     logger.info("Sending image response")
