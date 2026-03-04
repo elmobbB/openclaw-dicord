@@ -10,9 +10,9 @@ def _client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
-def sora_image(prompt: str) -> str:
+def generate_image(prompt: str) -> str:
     client = _client()
-    model = os.getenv("SORA_IMAGE_MODEL", "gpt-image-1")
+    model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
     response = client.images.generate(
         model=model,
         prompt=prompt,

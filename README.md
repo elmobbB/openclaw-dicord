@@ -1,6 +1,6 @@
 # OpenClaw AI Backend (Minimal)
 
-Minimal FastAPI backend scaffold with OpenAI as the reasoning agent and Sora (OpenAI-compatible) as the image tool.
+Minimal FastAPI backend scaffold with OpenAI as the reasoning agent and the OpenAI image tool (`gpt-image-1`).
 
 ## Quick start
 
@@ -13,7 +13,7 @@ docker compose up --build
 
 ## Discord bot
 
-The Discord bot exposes a `/openclaw` slash command (recommended) and also supports `@openclaw` mention prompts. It calls the API's `/openclaw` endpoint which returns either `image_url` or `text`.
+The Discord bot exposes `/openclaw` (text-or-image) and `/openclaw-video` (video) slash commands, and supports `@openclaw` mentions. Mentions default to image generation, or use `@openclaw video <prompt>` for video.
 
 ### Required env vars
 
@@ -32,6 +32,7 @@ docker compose up --build
 ## Endpoint
 
 - `POST /generate-image` with JSON `{ "prompt": "..." }`
+- `POST /generate-video` with JSON `{ "prompt": "...", "duration": 5 }` → returns `{ "video_url": "..." }`
 - `POST /openclaw` with JSON `{ "prompt": "..." }` → returns `{ "image_url": "..." }` or `{ "text": "..." }`
 
 ## Local test

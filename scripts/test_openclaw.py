@@ -7,13 +7,15 @@ import urllib.request
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("Usage: python scripts/test_openclaw.py \"your prompt\"")
+        print('Usage: python scripts/test_openclaw.py "your prompt"')
         return 1
     prompt = " ".join(sys.argv[1:])
     base_url = os.getenv("OPENCLAW_API_URL", "http://localhost:8000").rstrip("/")
     url = f"{base_url}/openclaw"
     data = json.dumps({"prompt": prompt}).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=90) as resp:
             body = resp.read().decode("utf-8")

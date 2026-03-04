@@ -34,6 +34,43 @@ async def _generate_response(prompt: str) -> dict:
             return await response.json()
 
 
+async def _generate_image(prompt: str) -> str:
+    base_url = os.getenv("OPENCLAW_API_URL", "http://api:8000").rstrip("/")
+    url = f"{base_url}/generate-image"
+    logger.info("Calling OpenClaw Image API: %s", url)
+    timeout = aiohttp.ClientTimeout(total=90)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(url, json={"prompt": prompt}) as response:
+            if response.status != 200:
+                detail = await response.text()
+                raise RuntimeError(f"OpenClaw API error {response.status}: {detail}")
+            data = await response.json()
+            image_url = data.get("image_url")
+            if not image_url:
+                raise RuntimeError("No image_url returned from API")
+            return image_url
+
+
+async def _generate_video(prompt: str) -> str:
+    base_url = os.getenv("OPENCLAW_API_URL", "http://api:8000").rstrip("/")
+    url = f"{base_url}/generate-video"
+    logger.info("Calling OpenClaw Video API: %s", url)
+    timeout = aiohttp.ClientTimeout(total=90)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(
+            url,
+            json={"prompt": prompt, "duration": 5},
+        ) as response:
+            if response.status != 200:
+                detail = await response.text()
+                raise RuntimeError(f"OpenClaw API error {response.status}: {detail}")
+            data = await response.json()
+            video_url = data.get("video_url")
+            if not video_url:
+                raise RuntimeError("No video_url returned from API")
+            return video_url
+
+
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
@@ -63,6 +100,22 @@ async def _send_response(target, payload: dict) -> None:
         await target.send(image_url)
 
 
+async def _send_video(target, video_url: str) -> None:
+    if video_url.startswith("data:video/"):
+        header, b64 = video_url.split(",", 1)
+        data = base64.b64decode(b64)
+        file = discord.File(fp=io.BytesIO(data), filename="openclaw.mp4")
+        await target.send(file=file)
+        return
+    if "base64," in video_url:
+        _, b64 = video_url.split("base64,", 1)
+        data = base64.b64decode(b64)
+        file = discord.File(fp=io.BytesIO(data), filename="openclaw.mp4")
+        await target.send(file=file)
+        return
+    await target.send(video_url)
+
+
 @tree.command(name="openclaw", description="Generate an image with OpenClaw")
 @app_commands.describe(prompt="Describe the image you want")
 async def openclaw(interaction: discord.Interaction, prompt: str) -> None:
@@ -71,6 +124,18 @@ async def openclaw(interaction: discord.Interaction, prompt: str) -> None:
     try:
         payload = await _generate_response(prompt)
         await _send_response(interaction.followup, payload)
+    except Exception as exc:
+        await interaction.followup.send(f"Error: {exc}")
+
+
+@tree.command(name="openclaw-video", description="Generate a video with OpenClaw (Sora)")
+@app_commands.describe(prompt="Describe the video you want")
+async def openclaw_video(interaction: discord.Interaction, prompt: str) -> None:
+    logger.info("Slash command /openclaw-video invoked")
+    await interaction.response.defer(thinking=True)
+    try:
+        video_url = await _generate_video(prompt)
+        await _send_video(interaction.followup, video_url)
     except Exception as exc:
         await interaction.followup.send(f"Error: {exc}")
 
@@ -92,8 +157,24 @@ async def on_message(message: discord.Message) -> None:
     status_msg = await message.channel.send("Working on it...")
     try:
         async with message.channel.typing():
-            payload = await _generate_response(prompt)
-            await _send_response(message.channel, payload)
+            lowered = prompt.lower()
+            if lowered.startswith("video ") or lowered.startswith("video:"):
+                video_prompt = prompt.split(" ", 1)[1].strip() if " " in prompt else ""
+                if not video_prompt:
+                    await message.channel.send("Please provide a prompt after 'video'.")
+                    return
+                video_url = await _generate_video(video_prompt)
+                await _send_video(message.channel, video_url)
+            elif lowered.startswith("image ") or lowered.startswith("image:"):
+                image_prompt = prompt.split(" ", 1)[1].strip() if " " in prompt else ""
+                if not image_prompt:
+                    await message.channel.send("Please provide a prompt after 'image'.")
+                    return
+                image_url = await _generate_image(image_prompt)
+                await _send_response(message.channel, {"image_url": image_url})
+            else:
+                payload = await _generate_response(prompt)
+                await _send_response(message.channel, payload)
     except Exception as exc:
         await message.channel.send(f"Error: {exc}")
     finally:
