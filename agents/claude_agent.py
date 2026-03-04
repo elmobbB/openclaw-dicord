@@ -37,7 +37,8 @@ def _chat(prompt: str):
                 "role": "system",
                 "content": (
                     "If the user is asking for an image, call the sora_image tool. "
-                    "Otherwise, answer the question directly with text."
+                    "Otherwise, answer the question directly with text. "
+                    "If asked about real-time data (like weather), say you don't have live access."
                 ),
             },
             {"role": "user", "content": prompt},
@@ -68,5 +69,7 @@ def generate_response(prompt: str) -> dict:
         return {"image_url": sora_image(tool_prompt)}
     text = (message.content or "").strip()
     if not text:
-        raise RuntimeError("No response content returned")
+        return {
+            "text": "Sorry, I couldn't answer that. Try rephrasing or be more specific."
+        }
     return {"text": text}

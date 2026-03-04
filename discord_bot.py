@@ -1,5 +1,6 @@
 import base64
 import io
+import logging
 import os
 
 import aiohttp
@@ -9,6 +10,8 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO, force=True)
+logger = logging.getLogger("openclaw.bot")
 
 
 def _env(name: str) -> str:
@@ -21,6 +24,7 @@ def _env(name: str) -> str:
 async def _generate_response(prompt: str) -> dict:
     base_url = os.getenv("OPENCLAW_API_URL", "http://api:8000").rstrip("/")
     url = f"{base_url}/openclaw"
+    logger.info("Calling OpenClaw API: %s", url)
     timeout = aiohttp.ClientTimeout(total=90)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(url, json={"prompt": prompt}) as response:
@@ -40,11 +44,14 @@ async def _send_response(target, payload: dict) -> None:
     image_url = payload.get("image_url")
     text = payload.get("text")
     if text:
+        logger.info("Sending text response (%d chars)", len(text))
         await target.send(text)
         return
     if not image_url:
+        logger.warning("No text or image_url in response payload: %s", payload)
         await target.send("No response returned from API.")
         return
+    logger.info("Sending image response")
     if image_url.startswith("data:image/"):
         header, b64 = image_url.split(",", 1)
         mime = header.split(";")[0].split(":")[1]
@@ -59,6 +66,7 @@ async def _send_response(target, payload: dict) -> None:
 @tree.command(name="openclaw", description="Generate an image with OpenClaw")
 @app_commands.describe(prompt="Describe the image you want")
 async def openclaw(interaction: discord.Interaction, prompt: str) -> None:
+    logger.info("Slash command /openclaw invoked")
     await interaction.response.defer(thinking=True)
     try:
         payload = await _generate_response(prompt)
@@ -71,19 +79,28 @@ async def openclaw(interaction: discord.Interaction, prompt: str) -> None:
 async def on_message(message: discord.Message) -> None:
     if message.author.bot or not client.user:
         return
+    logger.info("Message received: author=%s channel=%s", message.author, message.channel)
     if client.user not in message.mentions:
         return
     mention = f"<@{client.user.id}>"
     mention_nick = f"<@!{client.user.id}>"
     prompt = message.content.replace(mention, "").replace(mention_nick, "").strip()
     if not prompt:
+        logger.info("Mention received without prompt")
         await message.channel.send("Please provide a prompt after the mention.")
         return
+    status_msg = await message.channel.send("Working on it...")
     try:
-        payload = await _generate_response(prompt)
-        await _send_response(message.channel, payload)
+        async with message.channel.typing():
+            payload = await _generate_response(prompt)
+            await _send_response(message.channel, payload)
     except Exception as exc:
         await message.channel.send(f"Error: {exc}")
+    finally:
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
 
 
 @client.event
